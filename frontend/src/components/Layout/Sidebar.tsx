@@ -30,7 +30,7 @@ export default function Sidebar() {
     <aside className="w-60 min-h-screen bg-primary-dark text-white flex flex-col">
       <div className="px-6 py-5 border-b border-blue-800 flex items-center gap-2">
         <School size={22} />
-        <span className="font-bold text-lg tracking-tight">SchoolScheduler</span>
+        <span className="font-bold text-lg tracking-tight">Lúmien</span>
       </div>
 
       <nav className="flex-1 py-4 px-3 space-y-1">

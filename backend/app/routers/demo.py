@@ -22,4 +22,8 @@ def demo_status():
         "is_demo": settings.is_demo,
         "currency": settings.DEFAULT_CURRENCY,
         "currency_symbol": settings.CURRENCY_SYMBOL,
+        "school_name": settings.APP_NAME,
+        "school_short_name": settings.APP_SHORT_NAME,
+        "school_type": settings.SCHOOL_TYPE,
+        "school_country": settings.SCHOOL_COUNTRY,
     }

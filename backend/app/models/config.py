@@ -1,6 +1,15 @@
+import enum
 from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.sql import func
 from app.core.database import Base
+
+
+class SchoolType(str, enum.Enum):
+    tuition_center              = "Tuition Center"
+    international_primary       = "International Primary School"
+    international_secondary     = "International Secondary School"
+    day_care                    = "Day Care"
+    private_school              = "Private School"
 
 
 class SystemConfig(Base):

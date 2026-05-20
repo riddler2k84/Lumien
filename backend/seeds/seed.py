@@ -147,9 +147,12 @@ def _seed_base(db: Session) -> dict:
     refs["pay_components"] = pc_objs
 
     # System config
-    db.add(SystemConfig(key="currency", value=settings.DEFAULT_CURRENCY))
+    db.add(SystemConfig(key="currency",        value=settings.DEFAULT_CURRENCY))
     db.add(SystemConfig(key="currency_symbol", value=settings.CURRENCY_SYMBOL))
-    db.add(SystemConfig(key="school_name", value=settings.APP_NAME))
+    db.add(SystemConfig(key="school_name",     value=settings.APP_NAME))
+    db.add(SystemConfig(key="school_type",     value=settings.SCHOOL_TYPE))
+    db.add(SystemConfig(key="school_country",  value=settings.SCHOOL_COUNTRY))
+    db.add(SystemConfig(key="grades_offered",  value="Primary 1 – Secondary 5"))
     db.flush()
 
     return refs

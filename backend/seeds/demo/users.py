@@ -8,31 +8,34 @@ fake = Faker("en_GB")
 fake.seed_instance(42)
 random.seed(42)
 
-GRADE_LEVELS = list(range(1, 13))  # 1-12
+GRADE_LEVELS = list(range(1, 12))  # Primary 1–6 (grades 1-6) + Secondary 1–5 (grades 7-11)
 SECTIONS = ["A", "B", "C"]
 STUDENTS_PER_SECTION = 30
+
+# Staff with fixed name overrides (name, email, pwd_base, role, dept, emp_code)
+_STAFF_SPECS = [
+    #  first_name   last_name   email                       pwd_base      role                    dept              emp_code
+    ("Katherine", "Puah",    "headmaster@school.edu.sg",  "headmaster", UserRole.headmaster,    "Headmaster",     "HM-001"),
+    (None,        None,      "admin1@school.edu.sg",      "admin",      UserRole.admin,         "Administration", "ADM-001"),
+    (None,        None,      "admin2@school.edu.sg",      "admin",      UserRole.admin,         "Finance",        "ADM-002"),
+    (None,        None,      "admin3@school.edu.sg",      "admin",      UserRole.admin,         "Student Affairs","ADM-003"),
+    (None,        None,      "schedadmin1@school.edu.sg", "schedadmin", UserRole.schedule_admin,"Timetabling",    "SA-001"),
+    (None,        None,      "schedadmin2@school.edu.sg", "schedadmin", UserRole.schedule_admin,"Timetabling",    "SA-002"),
+    (None,        None,      "finance@school.edu.sg",     "finance",    UserRole.admin,         "Finance",        "ADM-004"),
+    (None,        None,      "hr@school.edu.sg",          "hrstaff",    UserRole.admin,         "HR",             "ADM-005"),
+]
 
 
 def seed_users(db, subjects: list) -> dict:
     created: dict = {"students": [], "teachers": [], "parents": [], "staff": []}
 
     # --- Staff (admin, headmaster, schedule_admin) ---
-    staff_specs = [
-        ("headmaster@school.edu.sg",   "headmaster",    UserRole.headmaster,     "Headmaster",       "HM-001"),
-        ("admin1@school.edu.sg",       "admin",         UserRole.admin,          "Administration",   "ADM-001"),
-        ("admin2@school.edu.sg",       "admin",         UserRole.admin,          "Finance",          "ADM-002"),
-        ("admin3@school.edu.sg",       "admin",         UserRole.admin,          "Student Affairs",  "ADM-003"),
-        ("schedadmin1@school.edu.sg",  "schedadmin",    UserRole.schedule_admin, "Timetabling",      "SA-001"),
-        ("schedadmin2@school.edu.sg",  "schedadmin",    UserRole.schedule_admin, "Timetabling",      "SA-002"),
-        ("finance@school.edu.sg",      "finance",       UserRole.admin,          "Finance",          "ADM-004"),
-        ("hr@school.edu.sg",           "hrstaff",       UserRole.admin,          "HR",               "ADM-005"),
-    ]
-    for email, pwd_base, role, dept, emp_code in staff_specs:
+    for first_name, last_name, email, pwd_base, role, dept, emp_code in _STAFF_SPECS:
         user = User(
             email=email,
             password_hash=hash_password("Demo@" + pwd_base.capitalize() + "1"),
-            first_name=fake.first_name(),
-            last_name=fake.last_name(),
+            first_name=first_name if first_name else fake.first_name(),
+            last_name=last_name if last_name else fake.last_name(),
             role=role,
             is_active=True,
         )
