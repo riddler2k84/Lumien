@@ -3,10 +3,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.core.config import settings
 from app.routers import auth, attendance, scheduling, fees, payroll, demo, users, dashboard
+from app.routers import rooms, students
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Ensure any new tables (e.g. student_special_needs) are created on startup
+    from app.core.database import engine, Base
+    import app.models  # noqa: F401 – registers all models with Base
+    Base.metadata.create_all(bind=engine)
     if settings.is_demo:
         _setup_demo_scheduler()
     yield
@@ -57,6 +62,8 @@ app.include_router(payroll.router)
 app.include_router(demo.router)
 app.include_router(users.router)
 app.include_router(dashboard.router)
+app.include_router(rooms.router)
+app.include_router(students.router)
 
 
 @app.get("/api/health")

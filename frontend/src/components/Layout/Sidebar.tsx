@@ -1,18 +1,20 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Calendar, Users, ClipboardCheck,
-  DollarSign, CreditCard, LogOut, School,
+  DollarSign, CreditCard, LogOut, GraduationCap, Building2, PenSquare,
 } from "lucide-react";
 import { useAuthStore } from "../../store/auth";
 import clsx from "clsx";
 
 const NAV = [
-  { to: "/dashboard",  label: "Dashboard",  icon: LayoutDashboard, roles: ["*"] },
-  { to: "/schedule",   label: "Schedule",   icon: Calendar,         roles: ["*"] },
-  { to: "/attendance", label: "Attendance", icon: ClipboardCheck,   roles: ["teacher", "admin", "schedule_admin", "headmaster"] },
-  { to: "/users",      label: "Users",      icon: Users,            roles: ["admin", "headmaster"] },
-  { to: "/fees",       label: "Fees",       icon: CreditCard,       roles: ["admin", "headmaster", "parent", "student"] },
-  { to: "/payroll",    label: "Payroll",    icon: DollarSign,       roles: ["admin", "headmaster"] },
+  { to: "/dashboard",        label: "Dashboard",    icon: LayoutDashboard, roles: ["*"] },
+  { to: "/schedule",         label: "Timetable",    icon: Calendar,        roles: ["*"] },
+  { to: "/schedule/builder", label: "Sch. Builder", icon: PenSquare,       roles: ["schedule_admin", "headmaster"] },
+  { to: "/classrooms",       label: "Classrooms",   icon: Building2,       roles: ["admin", "headmaster", "schedule_admin"] },
+  { to: "/attendance",       label: "Attendance",   icon: ClipboardCheck,  roles: ["teacher", "admin", "schedule_admin", "headmaster"] },
+  { to: "/users",            label: "Users",        icon: Users,           roles: ["admin", "headmaster"] },
+  { to: "/fees",             label: "Fees",         icon: CreditCard,      roles: ["admin", "headmaster", "parent", "student"] },
+  { to: "/payroll",          label: "Payroll",      icon: DollarSign,      roles: ["admin", "headmaster"] },
 ];
 
 export default function Sidebar() {
@@ -29,7 +31,7 @@ export default function Sidebar() {
   return (
     <aside className="w-60 min-h-screen bg-primary-dark text-white flex flex-col">
       <div className="px-6 py-5 border-b border-blue-800 flex items-center gap-2">
-        <School size={22} />
+        <GraduationCap size={22} />
         <span className="font-bold text-lg tracking-tight">Lúmien</span>
       </div>
 

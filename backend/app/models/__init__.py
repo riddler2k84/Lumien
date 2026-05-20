@@ -1,4 +1,4 @@
-from app.models.users import User, Student, Teacher, Parent, ParentStudent, Staff, UserRole
+from app.models.users import User, Student, Teacher, Parent, ParentStudent, Staff, UserRole, StudentSpecialNeed, SpecialNeedType
 from app.models.rooms import RoomType, Room, Facility, RoomFacility
 from app.models.academic import (
     Subject, SubjectRequirement, AcademicTerm, TimeSlot, ClassSection,
@@ -11,7 +11,7 @@ from app.models.payroll import PayGrade, EmployeePay, PayComponent, EmployeePayC
 from app.models.config import SystemConfig
 
 __all__ = [
-    "User", "Student", "Teacher", "Parent", "ParentStudent", "Staff", "UserRole",
+    "User", "Student", "Teacher", "Parent", "ParentStudent", "Staff", "UserRole", "StudentSpecialNeed", "SpecialNeedType",
     "RoomType", "Room", "Facility", "RoomFacility",
     "Subject", "SubjectRequirement", "AcademicTerm", "TimeSlot", "ClassSection",
     "TeacherSubject", "TeacherAvailability", "Enrollment", "DayOfWeek",

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import client from "../api/client";
 import { useAuthStore } from "../store/auth";
 import clsx from "clsx";
@@ -91,9 +92,12 @@ export default function Schedule() {
             {["A", "B", "C"].map(s => <option key={s} value={s}>Section {s}</option>)}
           </select>
           {(role === "schedule_admin" || role === "headmaster") && (
-            <button className="text-sm bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-dark transition-colors flex items-center gap-2">
-              <Calendar size={15} /> Generate New
-            </button>
+            <Link
+              to="/schedule/builder"
+              className="text-sm bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary-dark transition-colors flex items-center gap-2"
+            >
+              <Calendar size={15} /> Create Schedule
+            </Link>
           )}
         </div>
       </div>

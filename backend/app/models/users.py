@@ -1,5 +1,5 @@
 import enum
-from sqlalchemy import Column, Integer, String, Boolean, Enum, DateTime, ForeignKey, Date
+from sqlalchemy import Column, Integer, String, Boolean, Enum, DateTime, ForeignKey, Date, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -18,6 +18,19 @@ class ParentRelationship(str, enum.Enum):
     mother = "mother"
     father = "father"
     guardian = "guardian"
+
+
+class SpecialNeedType(str, enum.Enum):
+    visual_impairment       = "Visual Impairment"
+    hearing_impairment      = "Hearing Impairment"
+    physical_disability     = "Physical Disability"
+    learning_disability     = "Learning Disability"
+    adhd                    = "ADHD"
+    autism_spectrum         = "Autism Spectrum"
+    speech_language         = "Speech / Language"
+    gifted                  = "Gifted & Talented"
+    emotional_behavioral    = "Emotional / Behavioral"
+    intellectual_disability = "Intellectual Disability"
 
 
 class User(Base):
@@ -48,7 +61,7 @@ class Student(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
-    grade_level = Column(Integer, nullable=False)  # 1-12
+    grade_level = Column(Integer, nullable=False)  # 1-11
     enrollment_date = Column(Date, nullable=False)
     student_code = Column(String(20), unique=True, nullable=False)
 
@@ -58,6 +71,21 @@ class Student(Base):
     attendance_records = relationship("AttendanceRecord", back_populates="student")
     invoices = relationship("Invoice", back_populates="student")
     scholarships = relationship("ScholarshipDiscount", back_populates="student")
+    special_needs = relationship("StudentSpecialNeed", back_populates="student", cascade="all, delete-orphan")
+
+
+class StudentSpecialNeed(Base):
+    __tablename__ = "student_special_needs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+    need_type = Column(Enum(SpecialNeedType), nullable=False)
+    notes = Column(String(500))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (UniqueConstraint("student_id", "need_type", name="uq_student_need"),)
+
+    student = relationship("Student", back_populates="special_needs")
 
 
 class Teacher(Base):

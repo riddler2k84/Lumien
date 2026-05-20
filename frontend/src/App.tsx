@@ -4,6 +4,8 @@ import AppLayout from "./components/Layout/AppLayout";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Schedule from "./pages/Schedule";
+import Classrooms from "./pages/Classrooms";
+import ScheduleBuilder from "./pages/ScheduleBuilder";
 import Attendance from "./pages/Attendance";
 import Fees from "./pages/Fees";
 import Payroll from "./pages/Payroll";
@@ -19,12 +21,14 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route element={<AppLayout />}>
             <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard"  element={<Dashboard />} />
-            <Route path="/schedule"   element={<Schedule />} />
-            <Route path="/attendance" element={<Attendance />} />
-            <Route path="/fees"       element={<Fees />} />
-            <Route path="/payroll"    element={<Payroll />} />
-            <Route path="/users"      element={<Users />} />
+            <Route path="/dashboard"          element={<Dashboard />} />
+            <Route path="/schedule"           element={<Schedule />} />
+            <Route path="/schedule/builder"   element={<ScheduleBuilder />} />
+            <Route path="/classrooms"         element={<Classrooms />} />
+            <Route path="/attendance"         element={<Attendance />} />
+            <Route path="/fees"               element={<Fees />} />
+            <Route path="/payroll"            element={<Payroll />} />
+            <Route path="/users"              element={<Users />} />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
