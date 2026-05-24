@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import client from "../api/client";
 import { useAuthStore } from "../store/auth";
 import clsx from "clsx";
-import { Calendar, CheckCircle, Clock } from "lucide-react";
+import { Calendar } from "lucide-react";
 
 const DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday"];
 const DAY_LABELS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];

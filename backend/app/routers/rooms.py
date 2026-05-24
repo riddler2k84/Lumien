@@ -123,6 +123,56 @@ def update_room(
     return _serialize(room)
 
 
+@router.get("/{room_id}/classes")
+def room_classes(
+    room_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """Return all scheduled classes assigned to this room from the active schedule."""
+    from app.models.scheduling import Schedule, ScheduleEntry, ScheduleStatus
+    from app.models.academic import ClassSection
+
+    room = db.get(Room, room_id)
+    if not room:
+        raise HTTPException(404, "Room not found")
+
+    # Use the active schedule; fall back to the most recent one
+    schedule = (
+        db.query(Schedule).filter(Schedule.status == ScheduleStatus.active).first()
+        or db.query(Schedule).order_by(Schedule.id.desc()).first()
+    )
+    if not schedule:
+        return []
+
+    entries = (
+        db.query(ScheduleEntry)
+        .filter(ScheduleEntry.schedule_id == schedule.id, ScheduleEntry.room_id == room_id)
+        .all()
+    )
+
+    results = []
+    for e in entries:
+        ts = e.time_slot
+        cs = e.class_section
+        teacher = e.teacher.user if e.teacher else None
+        results.append({
+            "day":        ts.day_of_week.value,
+            "period":     ts.period_number,
+            "start_time": str(ts.start_time)[:5] if ts.start_time else None,
+            "end_time":   str(ts.end_time)[:5]   if ts.end_time   else None,
+            "subject":    cs.subject.name,
+            "section":    cs.section_name,
+            "grade":      cs.grade_level,
+            "teacher":    teacher.full_name if teacher else "—",
+        })
+
+    # Sort by day order then period
+    day_order = {"monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4}
+    results.sort(key=lambda x: (day_order.get(x["day"], 9), x["period"]))
+    return results
+
+
 @router.delete("/{room_id}")
 def deactivate_room(
     room_id: int,

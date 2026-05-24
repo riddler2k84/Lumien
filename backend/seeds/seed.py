@@ -1,7 +1,8 @@
 """
 Entry point for seeding the database.
   - Base seed: always runs (subjects, room types, facilities, rooms, time slots, pay components)
-  - Demo seed: only when APP_MODE=demo
+  - Demo seed: full 990 students, 50 teachers, attendance, schedules, fees, payroll
+  - Production seed: super admin + Katherine Puah (headmaster) only
 """
 import sys
 import os
@@ -9,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from sqlalchemy.orm import Session
 from app.core.config import settings
-from app.core.database import SessionLocal, engine, Base
+from app.core.database import ProdSessionLocal, DemoSessionLocal, prod_engine, demo_engine, Base
 
 # Base data
 from seeds.base.subjects import SUBJECTS
@@ -24,10 +25,10 @@ from app.models import (
 )
 
 
-def _clear_all(db: Session):
+def _clear_all(db: Session, bind_engine):
     """Truncate all tables in reverse dependency order for a clean re-seed."""
-    from sqlalchemy import text, inspect, event
-    dialect = engine.dialect.name
+    from sqlalchemy import text
+    dialect = bind_engine.dialect.name
     if dialect == "postgresql":
         db.execute(text("SET session_replication_role = 'replica'"))
         for table in reversed(Base.metadata.sorted_tables):
@@ -94,23 +95,23 @@ def _seed_base(db: Session) -> dict:
     refs["fac_map"] = fac_map
 
     # Subject requirements (lab subjects)
-    chem = next(s for s in subject_objs if s.code == "CHEM")
-    bio = next(s for s in subject_objs if s.code == "BIO")
-    phy = next(s for s in subject_objs if s.code == "PHY")
-    cs = next(s for s in subject_objs if s.code == "CS")
-    art = next(s for s in subject_objs if s.code == "ART")
+    chem  = next(s for s in subject_objs if s.code == "CHEM")
+    bio   = next(s for s in subject_objs if s.code == "BIO")
+    phy   = next(s for s in subject_objs if s.code == "PHY")
+    cs    = next(s for s in subject_objs if s.code == "CS")
+    art   = next(s for s in subject_objs if s.code == "ART")
     music = next(s for s in subject_objs if s.code == "MUS")
-    pe = next(s for s in subject_objs if s.code == "PE")
+    pe    = next(s for s in subject_objs if s.code == "PE")
 
     req_defs = [
-        (chem.id, fac_map["Bunsen Burners"].id, 10, True),
-        (chem.id, fac_map["Fume Hood"].id, 1, True),
-        (bio.id,  fac_map["Microscopes"].id, 15, True),
-        (phy.id,  fac_map["Bunsen Burners"].id, 5, False),
-        (cs.id,   fac_map["Computers"].id, 20, True),
-        (art.id,  fac_map["Art Sink"].id, 1, True),
-        (music.id, fac_map["Piano"].id, 1, True),
-        (pe.id,   fac_map["Sports Equipment"].id, 1, True),
+        (chem.id,  fac_map["Bunsen Burners"].id, 10, True),
+        (chem.id,  fac_map["Fume Hood"].id,       1, True),
+        (bio.id,   fac_map["Microscopes"].id,     15, True),
+        (phy.id,   fac_map["Bunsen Burners"].id,   5, False),
+        (cs.id,    fac_map["Computers"].id,        20, True),
+        (art.id,   fac_map["Art Sink"].id,          1, True),
+        (music.id, fac_map["Piano"].id,             1, True),
+        (pe.id,    fac_map["Sports Equipment"].id,  1, True),
     ]
     for subject_id, facility_id, min_qty, mandatory in req_defs:
         db.add(SubjectRequirement(
@@ -167,11 +168,11 @@ def _seed_demo(db: Session, refs: dict):
 
     user_data = seed_users(db, refs["subjects"])
 
-    teachers = [t for t, _ in user_data["teachers"]]
-    teacher_users = [t.user for t in teachers]
+    teachers               = [t for t, _ in user_data["teachers"]]
+    teacher_users          = [t.user for t in teachers]
     teachers_with_subjects = user_data["teachers"]
-    staff_users = user_data["staff"]
-    students = user_data["students"]
+    staff_users            = user_data["staff"]
+    students               = user_data["students"]
 
     academic_data = seed_academic(
         db,
@@ -181,8 +182,8 @@ def _seed_demo(db: Session, refs: dict):
         refs["time_slots"],
     )
 
-    current_term = academic_data["current_term"]
-    admin_user = next(u for u in staff_users if u.role.value == "admin")
+    current_term    = academic_data["current_term"]
+    admin_user      = next(u for u in staff_users if u.role.value == "admin")
     headmaster_user = next(u for u in staff_users if u.role.value == "headmaster")
 
     print("  Building timetable...")
@@ -190,7 +191,7 @@ def _seed_demo(db: Session, refs: dict):
     db.commit()
 
     print("  Seeding attendance records...")
-    seed_attendance_from_schedule(db, schedule, admin_user.id, days_back=30)
+    seed_attendance_from_schedule(db, schedule, admin_user.id, days_back=7)
     db.commit()
 
     seed_fees(db, students, current_term, admin_user.id, headmaster_user.id)
@@ -202,43 +203,91 @@ def _seed_demo(db: Session, refs: dict):
           f"{len(staff_users)} staff seeded.")
 
 
-def run_seed(db: Session, force: bool = False):
+def _seed_production(db: Session, refs: dict):
+    """Production tenant: Super Admin + Katherine Puah (Headmaster).  No student/demo data."""
+    from app.models.users import User, UserRole, Staff
+    from app.core.security import hash_password
+
+    users_created = []
+
+    def _make_user(email, password, first, last, role, dept, emp_code):
+        existing = db.query(User).filter(User.email == email).first()
+        if existing:
+            return existing
+        u = User(
+            email=email,
+            password_hash=hash_password(password),
+            first_name=first,
+            last_name=last,
+            role=role,
+            is_active=True,
+        )
+        db.add(u)
+        db.flush()
+        db.add(Staff(user_id=u.id, department=dept, employee_code=emp_code))
+        db.flush()
+        users_created.append(u)
+        return u
+
+    _make_user(
+        email="superadmin@lumien.io",
+        password="SuperAdmin@Lumien1",
+        first="Lúmien",
+        last="SuperAdmin",
+        role=UserRole.super_admin,
+        dept="System Administration",
+        emp_code="SA-001",
+    )
+
+    _make_user(
+        email="katherine.puah@frontier.edu.my",
+        password="Frontier@Admin1",
+        first="Katherine",
+        last="Puah",
+        role=UserRole.headmaster,
+        dept="Administration",
+        emp_code="HM-001",
+    )
+
+    db.commit()
+    print(f"Production seed complete: {len(users_created)} users created.")
+    print("  superadmin@lumien.io        / SuperAdmin@Lumien1")
+    print("  katherine.puah@frontier.edu.my / Frontier@Admin1")
+
+
+def run_seed(db: Session, force: bool = False, tenant: str = "demo"):
+    bind = demo_engine if tenant == "demo" else prod_engine
+
     if force:
         print("Clearing existing data...")
-        _clear_all(db)
+        _clear_all(db, bind)
 
     print("Seeding base data...")
     refs = _seed_base(db)
     db.commit()
 
-    if settings.is_demo:
+    if tenant == "demo":
         print("Seeding demo data...")
         _seed_demo(db, refs)
     else:
-        # Production: just create a default headmaster account
-        from app.models.users import User, Staff, UserRole
-        from app.core.security import hash_password
-        existing = db.query(User).filter(User.email == "admin@school.edu.sg").first()
-        if not existing:
-            user = User(
-                email="admin@school.edu.sg",
-                password_hash=hash_password("ChangeMe@123"),
-                first_name="School",
-                last_name="Administrator",
-                role=UserRole.headmaster,
-                is_active=True,
-            )
-            db.add(user)
-            db.flush()
-            db.add(Staff(user_id=user.id, department="Administration", employee_code="HM-001"))
-            db.commit()
-            print("Production seed complete. Default admin: admin@school.edu.sg / ChangeMe@123")
+        print("Seeding production data...")
+        _seed_production(db, refs)
 
 
 if __name__ == "__main__":
-    Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
+    force  = "--force"      in sys.argv
+    demo   = "--demo"       in sys.argv
+    prod   = "--production" in sys.argv
+
+    # Default to demo when no flag given (backward compat)
+    tenant = "production" if prod else "demo"
+
+    bind   = demo_engine if tenant == "demo" else prod_engine
+    Sess   = DemoSessionLocal if tenant == "demo" else ProdSessionLocal
+
+    Base.metadata.create_all(bind=bind)
+    db = Sess()
     try:
-        run_seed(db, force="--force" in sys.argv)
+        run_seed(db, force=force, tenant=tenant)
     finally:
         db.close()

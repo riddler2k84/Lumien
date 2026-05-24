@@ -10,6 +10,8 @@ import Attendance from "./pages/Attendance";
 import Fees from "./pages/Fees";
 import Payroll from "./pages/Payroll";
 import Users from "./pages/Users";
+import Teachers from "./pages/Teachers";
+import Students from "./pages/Students";
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 30_000 } } });
 
@@ -29,6 +31,8 @@ export default function App() {
             <Route path="/fees"               element={<Fees />} />
             <Route path="/payroll"            element={<Payroll />} />
             <Route path="/users"              element={<Users />} />
+            <Route path="/teachers"           element={<Teachers />} />
+            <Route path="/students"           element={<Students />} />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

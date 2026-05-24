@@ -1,86 +1,119 @@
+/**
+ * Users — System account management
+ * Create / edit any user, assign their role, activate or deactivate access.
+ */
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import client from "../api/client";
 import clsx from "clsx";
-import { Search, X, Plus, Minus } from "lucide-react";
+import { Search, Plus, Pencil, X, KeyRound, ToggleLeft, ToggleRight, Loader2 } from "lucide-react";
 
-// ── Role badges ───────────────────────────────────────────────────────────────
-const ROLE_CFG: Record<string, { label: string; class: string }> = {
-  headmaster:     { label: "Headmaster",     class: "bg-purple-100 text-purple-700"  },
-  admin:          { label: "Admin",          class: "bg-blue-100 text-blue-700"      },
-  schedule_admin: { label: "Schedule Admin", class: "bg-indigo-100 text-indigo-700"  },
-  teacher:        { label: "Teacher",        class: "bg-green-100 text-green-700"    },
-  student:        { label: "Student",        class: "bg-amber-100 text-amber-700"    },
-  parent:         { label: "Parent",         class: "bg-gray-100 text-gray-600"      },
-};
-
-const NEED_COLORS = [
-  "bg-red-100 text-red-700",     "bg-orange-100 text-orange-700",
-  "bg-amber-100 text-amber-700", "bg-yellow-100 text-yellow-700",
-  "bg-lime-100 text-lime-700",   "bg-green-100 text-green-700",
-  "bg-teal-100 text-teal-700",   "bg-cyan-100 text-cyan-700",
-  "bg-blue-100 text-blue-700",   "bg-violet-100 text-violet-700",
+// ── Config ────────────────────────────────────────────────────────────────────
+const ROLES = [
+  { value: "headmaster",     label: "Headmaster",     badge: "bg-purple-100 text-purple-700" },
+  { value: "admin",          label: "Admin",          badge: "bg-blue-100   text-blue-700"   },
+  { value: "schedule_admin", label: "Sch. Admin",     badge: "bg-indigo-100 text-indigo-700" },
+  { value: "teacher",        label: "Teacher",        badge: "bg-green-100  text-green-700"  },
+  { value: "student",        label: "Student",        badge: "bg-amber-100  text-amber-700"  },
+  { value: "parent",         label: "Parent",         badge: "bg-gray-100   text-gray-600"   },
 ];
+const roleBadge = (r: string) =>
+  ROLES.find(x => x.value === r)?.badge ?? "bg-gray-100 text-gray-500";
+const roleLabel = (r: string) =>
+  ROLES.find(x => x.value === r)?.label ?? r;
 
-const ALL_NEED_TYPES = [
-  "Visual Impairment", "Hearing Impairment", "Physical Disability",
-  "Learning Disability", "ADHD", "Autism Spectrum", "Speech / Language",
-  "Gifted & Talented", "Emotional / Behavioral", "Intellectual Disability",
-];
-
-interface SpecialNeed { id: number; need_type: string; notes?: string }
 interface UserRow {
   id: number; email: string; first_name: string; last_name: string;
   role: string; is_active: boolean;
   student_id?: number | null; teacher_id?: number | null;
 }
 
+const BLANK_FORM = {
+  first_name: "", last_name: "", email: "", password: "", role: "admin",
+  department: "", employee_code: "", phone: "", grade_level: 1,
+};
+
+// ── Component ─────────────────────────────────────────────────────────────────
 export default function Users() {
   const qc = useQueryClient();
-  const [search,       setSearch]       = useState("");
-  const [roleFilter,   setRoleFilter]   = useState("all");
-  const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
+  const [search,     setSearch]     = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [modal,      setModal]      = useState<"create" | "edit" | "password" | null>(null);
+  const [editing,    setEditing]    = useState<UserRow | null>(null);
+  const [form,       setForm]       = useState({ ...BLANK_FORM });
+  const [newPwd,     setNewPwd]     = useState("");
+  const [formErr,    setFormErr]    = useState("");
 
-  // ── Queries ───────────────────────────────────────────────────────────────
   const { data: users = [], isLoading } = useQuery<UserRow[]>({
     queryKey: ["users"],
     queryFn: () => client.get("/users/").then(r => r.data),
   });
 
-  const { data: needs = [], refetch: refetchNeeds } = useQuery<SpecialNeed[]>({
-    queryKey: ["student-needs", selectedUser?.student_id],
-    queryFn: () =>
-      client.get(`/students/${selectedUser!.student_id}/needs`).then(r => r.data),
-    enabled: !!(selectedUser?.student_id),
+  const createUser = useMutation({
+    mutationFn: (d: object) => client.post("/users/", d).then(r => r.data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["users"] }); closeModal(); },
+    onError: (e: any) => setFormErr(e.response?.data?.detail ?? "Save failed"),
   });
 
-  // ── Mutations ─────────────────────────────────────────────────────────────
-  const addNeed = useMutation({
-    mutationFn: (need_type: string) =>
-      client.post(`/students/${selectedUser!.student_id}/needs`, { need_type }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["student-needs", selectedUser?.student_id] });
-      refetchNeeds();
-    },
+  const updateUser = useMutation({
+    mutationFn: ({ id, d }: { id: number; d: object }) =>
+      client.patch(`/users/${id}`, d).then(r => r.data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["users"] }); closeModal(); },
+    onError: (e: any) => setFormErr(e.response?.data?.detail ?? "Update failed"),
   });
 
-  const removeNeed = useMutation({
-    mutationFn: (need_id: number) =>
-      client.delete(`/students/${selectedUser!.student_id}/needs/${need_id}`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["student-needs", selectedUser?.student_id] });
-      refetchNeeds();
-    },
+  const resetPwd = useMutation({
+    mutationFn: ({ id, pwd }: { id: number; pwd: string }) =>
+      client.post(`/users/${id}/reset-password`, { new_password: pwd }),
+    onSuccess: () => { setModal(null); setNewPwd(""); },
+    onError: (e: any) => setFormErr(e.response?.data?.detail ?? "Reset failed"),
   });
 
-  // ── Filter ────────────────────────────────────────────────────────────────
+  const toggleActive = useMutation({
+    mutationFn: ({ id, active }: { id: number; active: boolean }) =>
+      client.patch(`/users/${id}`, { is_active: active }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["users"] }),
+  });
+
+  function openCreate() {
+    setEditing(null); setForm({ ...BLANK_FORM }); setFormErr(""); setModal("create");
+  }
+  function openEdit(u: UserRow) {
+    setEditing(u);
+    setForm({
+      first_name: u.first_name, last_name: u.last_name, email: u.email,
+      password: "", role: u.role, department: "", employee_code: "", phone: "",
+      grade_level: 1,
+    });
+    setFormErr(""); setModal("edit");
+  }
+  function openPwd(u: UserRow) {
+    setEditing(u); setNewPwd(""); setFormErr(""); setModal("password");
+  }
+  function closeModal() { setModal(null); setEditing(null); setFormErr(""); }
+
+  function handleSave() {
+    if (!form.first_name || !form.last_name || !form.email) {
+      return setFormErr("First name, last name and email are required.");
+    }
+    if (modal === "create" && !form.password) return setFormErr("Password is required.");
+    if (modal === "create") {
+      createUser.mutate(form);
+    } else {
+      const patch: Record<string, any> = {};
+      if (form.first_name) patch.first_name = form.first_name;
+      if (form.last_name)  patch.last_name  = form.last_name;
+      if (form.email)      patch.email      = form.email;
+      if (form.role)       patch.role       = form.role;
+      updateUser.mutate({ id: editing!.id, d: patch });
+    }
+  }
+
   const filtered = users.filter(u => {
     if (roleFilter !== "all" && u.role !== roleFilter) return false;
     if (search) {
       const q = search.toLowerCase();
-      if (!u.first_name?.toLowerCase().includes(q) &&
-          !u.last_name?.toLowerCase().includes(q) &&
-          !u.email?.toLowerCase().includes(q)) return false;
+      return (u.first_name + " " + u.last_name + " " + u.email).toLowerCase().includes(q);
     }
     return true;
   });
@@ -88,167 +121,231 @@ export default function Users() {
   const counts: Record<string, number> = {};
   for (const u of users) counts[u.role] = (counts[u.role] ?? 0) + 1;
 
-  const activeNeedTypes = new Set(needs.map(n => n.need_type));
+  const isPending = createUser.isPending || updateUser.isPending;
 
   return (
-    <div className="flex gap-5">
-      {/* ── Main list column ──────────────────────────────────────────────── */}
-      <div className="flex-1 min-w-0 space-y-5">
-        <div className="flex items-center justify-between">
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
           <h1 className="text-2xl font-bold text-gray-900">Users</h1>
-          <button className="bg-primary text-white px-4 py-2 rounded-lg text-sm hover:bg-primary-dark transition-colors">
-            + Add User
-          </button>
+          <p className="text-sm text-gray-400 mt-0.5">System accounts — who can log in and what role they play</p>
         </div>
-
-        {/* Role pills */}
-        <div className="flex flex-wrap gap-2">
-          <button onClick={() => setRoleFilter("all")}
-            className={clsx("px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-              roleFilter === "all" ? "bg-gray-800 text-white" : "bg-white border border-gray-200 text-gray-500 hover:bg-gray-50")}>
-            All ({users.length})
-          </button>
-          {Object.entries(ROLE_CFG).map(([key, { label, class: cls }]) => counts[key] ? (
-            <button key={key} onClick={() => setRoleFilter(key)}
-              className={clsx("px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors",
-                roleFilter === key ? "bg-gray-800 text-white border-gray-800" : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50")}>
-              {label} ({counts[key]})
-            </button>
-          ) : null)}
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="p-4 border-b border-gray-100">
-            <div className="relative">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input type="text" placeholder="Search by name or email…"
-                value={search} onChange={e => setSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary" />
-            </div>
-          </div>
-
-          {isLoading ? (
-            <div className="p-10 text-center text-gray-400">Loading…</div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-400 text-xs font-semibold uppercase tracking-wide">
-                <tr>
-                  <th className="px-4 py-3 text-left">Name</th>
-                  <th className="px-4 py-3 text-left">Email</th>
-                  <th className="px-4 py-3 text-left">Role</th>
-                  <th className="px-4 py-3 text-left">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {filtered.slice(0, 200).map(u => (
-                  <tr
-                    key={u.id}
-                    onClick={() => u.role === "student" && setSelectedUser(p => p?.id === u.id ? null : u)}
-                    className={clsx(
-                      "transition-colors",
-                      u.role === "student"
-                        ? "cursor-pointer hover:bg-blue-50/60"
-                        : "hover:bg-gray-50",
-                      selectedUser?.id === u.id && "bg-blue-50 ring-inset ring-1 ring-blue-200",
-                    )}
-                  >
-                    <td className="px-4 py-3 font-medium text-gray-800">
-                      <span>{u.first_name} {u.last_name}</span>
-                      {u.role === "student" && (
-                        <span className="ml-2 text-[10px] text-blue-400 font-normal select-none">
-                          {selectedUser?.id === u.id ? "▾ needs" : "▸ needs"}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-gray-400 text-xs">{u.email}</td>
-                    <td className="px-4 py-3">
-                      <span className={clsx("px-2.5 py-0.5 rounded-full text-xs font-medium",
-                        ROLE_CFG[u.role]?.class ?? "bg-gray-100 text-gray-500")}>
-                        {ROLE_CFG[u.role]?.label ?? u.role}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium",
-                        u.is_active ? "bg-green-100 text-green-700" : "bg-red-100 text-red-400")}>
-                        {u.is_active ? "Active" : "Inactive"}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          {filtered.length > 200 && (
-            <p className="text-xs text-gray-400 text-center p-3">
-              Showing 200 of {filtered.length} — use search to narrow down.
-            </p>
-          )}
-        </div>
+        <button onClick={openCreate}
+          className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-dark flex items-center gap-2">
+          <Plus size={15} /> Add User
+        </button>
       </div>
 
-      {/* ── Special needs panel ───────────────────────────────────────────── */}
-      {selectedUser?.student_id && (
-        <div className="w-72 shrink-0">
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm sticky top-4">
-            {/* Header */}
-            <div className="flex items-start justify-between px-4 py-3 border-b border-gray-100">
-              <div>
-                <p className="font-semibold text-sm text-gray-800">
-                  {selectedUser.first_name} {selectedUser.last_name}
-                </p>
-                <p className="text-[11px] text-gray-400 mt-0.5">{selectedUser.email}</p>
-              </div>
-              <button onClick={() => setSelectedUser(null)} className="text-gray-400 hover:text-gray-700 p-0.5 mt-0.5">
-                <X size={15} />
-              </button>
-            </div>
+      {/* Role filter */}
+      <div className="flex flex-wrap gap-2">
+        <button onClick={() => setRoleFilter("all")}
+          className={clsx("px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+            roleFilter === "all" ? "bg-gray-800 text-white" : "bg-white border border-gray-200 text-gray-500 hover:bg-gray-50")}>
+          All ({users.length})
+        </button>
+        {ROLES.map(({ value, label }) => counts[value] ? (
+          <button key={value} onClick={() => setRoleFilter(value)}
+            className={clsx("px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors",
+              roleFilter === value ? "bg-gray-800 text-white border-gray-800" : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50")}>
+            {label} ({counts[value]})
+          </button>
+        ) : null)}
+      </div>
 
-            <div className="p-4 space-y-3">
-              <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold">Special Needs</p>
+      {/* Search + table */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-gray-100">
+          <div className="relative">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input placeholder="Search name or email…" value={search} onChange={e => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary" />
+          </div>
+        </div>
 
-              {/* Active needs chips */}
-              {needs.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {needs.map((n, i) => (
-                    <span key={n.id}
-                      className={clsx("inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium",
-                        NEED_COLORS[i % NEED_COLORS.length])}>
-                      {n.need_type}
-                      <button onClick={() => removeNeed.mutate(n.id)} title="Remove" className="hover:opacity-60 ml-0.5">
-                        <Minus size={9} />
-                      </button>
+        {isLoading ? (
+          <div className="p-10 text-center text-gray-400">Loading…</div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-xs text-gray-400 font-semibold uppercase tracking-wide">
+              <tr>
+                <th className="px-4 py-3 text-left">Name</th>
+                <th className="px-4 py-3 text-left hidden md:table-cell">Email</th>
+                <th className="px-4 py-3 text-left">Role</th>
+                <th className="px-4 py-3 text-left">Status</th>
+                <th className="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {filtered.slice(0, 300).map(u => (
+                <tr key={u.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-4 py-3 font-medium text-gray-800">
+                    {u.first_name} {u.last_name}
+                  </td>
+                  <td className="px-4 py-3 text-gray-400 text-xs hidden md:table-cell">{u.email}</td>
+                  <td className="px-4 py-3">
+                    <span className={clsx("px-2.5 py-0.5 rounded-full text-xs font-medium", roleBadge(u.role))}>
+                      {roleLabel(u.role)}
                     </span>
-                  ))}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium",
+                      u.is_active ? "bg-green-100 text-green-700" : "bg-red-100 text-red-400")}>
+                      {u.is_active ? "Active" : "Inactive"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1 justify-end">
+                      <button onClick={() => openEdit(u)} title="Edit"
+                        className="p-1.5 text-gray-400 hover:text-primary rounded hover:bg-blue-50">
+                        <Pencil size={13} />
+                      </button>
+                      <button onClick={() => openPwd(u)} title="Reset password"
+                        className="p-1.5 text-gray-400 hover:text-amber-600 rounded hover:bg-amber-50">
+                        <KeyRound size={13} />
+                      </button>
+                      <button
+                        onClick={() => toggleActive.mutate({ id: u.id, active: !u.is_active })}
+                        title={u.is_active ? "Deactivate" : "Activate"}
+                        className={clsx("p-1.5 rounded",
+                          u.is_active
+                            ? "text-green-500 hover:text-red-500 hover:bg-red-50"
+                            : "text-gray-300 hover:text-green-500 hover:bg-green-50"
+                        )}>
+                        {u.is_active ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {filtered.length > 300 && (
+          <p className="text-xs text-gray-400 text-center p-3">
+            Showing 300 of {filtered.length} — use search to narrow down.
+          </p>
+        )}
+      </div>
+
+      {/* ── Create / Edit modal ─────────────────────────────────────────────── */}
+      {(modal === "create" || modal === "edit") && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="font-bold text-gray-800">{modal === "create" ? "Add User" : "Edit User"}</h2>
+              <button onClick={closeModal} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">First Name</label>
+                  <input value={form.first_name} onChange={e => setForm(f => ({ ...f, first_name: e.target.value }))}
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Last Name</label>
+                  <input value={form.last_name} onChange={e => setForm(f => ({ ...f, last_name: e.target.value }))}
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Email</label>
+                <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary" />
+              </div>
+              {modal === "create" && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Password</label>
+                  <input type="password" value={form.password} onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                    placeholder="Minimum 8 characters"
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary" />
                 </div>
               )}
-              {needs.length === 0 && (
-                <p className="text-xs text-gray-400 italic">No flags recorded yet.</p>
-              )}
-
-              <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold pt-1">Add flag</p>
-              <div className="space-y-0.5">
-                {ALL_NEED_TYPES.map(nt => {
-                  const active = activeNeedTypes.has(nt);
-                  return (
-                    <button
-                      key={nt}
-                      disabled={active || addNeed.isPending}
-                      onClick={() => !active && addNeed.mutate(nt)}
-                      className={clsx(
-                        "w-full text-left px-3 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors",
-                        active
-                          ? "text-gray-300 cursor-default"
-                          : "text-gray-600 hover:bg-blue-50 hover:text-blue-700",
-                      )}
-                    >
-                      {nt}
-                      {active
-                        ? <span className="text-green-400 text-[10px] font-bold">✓</span>
-                        : <Plus size={10} className="text-gray-300 shrink-0" />}
-                    </button>
-                  );
-                })}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Role</label>
+                <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary">
+                  {ROLES.map(r => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </select>
               </div>
+              {modal === "create" && form.role === "teacher" && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Employee Code (optional)</label>
+                  <input value={form.employee_code} onChange={e => setForm(f => ({ ...f, employee_code: e.target.value }))}
+                    placeholder="Auto-generated if blank"
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary" />
+                </div>
+              )}
+              {modal === "create" && form.role === "student" && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Grade Level</label>
+                  <select value={form.grade_level} onChange={e => setForm(f => ({ ...f, grade_level: Number(e.target.value) }))}
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary">
+                    {Array.from({ length: 11 }, (_, i) => i + 1).map(g => (
+                      <option key={g} value={g}>Grade {g}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {modal === "create" && form.role === "parent" && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Phone</label>
+                  <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+                    placeholder="+60 12-3456789"
+                    className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary" />
+                </div>
+              )}
+              {formErr && <p className="text-xs text-red-500">{formErr}</p>}
+            </div>
+            <div className="flex gap-3 px-6 pb-6">
+              <button onClick={closeModal}
+                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">
+                Cancel
+              </button>
+              <button onClick={handleSave} disabled={isPending}
+                className="flex-1 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-dark disabled:opacity-50 flex items-center justify-center gap-2">
+                {isPending && <Loader2 size={14} className="animate-spin" />}
+                {modal === "create" ? "Create User" : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Reset password modal ─────────────────────────────────────────────── */}
+      {modal === "password" && editing && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="font-bold text-gray-800">Reset Password</h2>
+              <button onClick={closeModal} className="text-gray-400 hover:text-gray-700"><X size={18} /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-500">
+                Setting new password for <strong>{editing.first_name} {editing.last_name}</strong>
+              </p>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">New Password</label>
+                <input type="password" value={newPwd} onChange={e => setNewPwd(e.target.value)}
+                  placeholder="Minimum 8 characters"
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary" />
+              </div>
+              {formErr && <p className="text-xs text-red-500">{formErr}</p>}
+            </div>
+            <div className="flex gap-3 px-6 pb-6">
+              <button onClick={closeModal}
+                className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50">
+                Cancel
+              </button>
+              <button onClick={() => resetPwd.mutate({ id: editing.id, pwd: newPwd })}
+                disabled={newPwd.length < 6 || resetPwd.isPending}
+                className="flex-1 py-2.5 bg-amber-500 text-white rounded-xl text-sm font-semibold hover:bg-amber-600 disabled:opacity-50 flex items-center justify-center gap-2">
+                {resetPwd.isPending && <Loader2 size={14} className="animate-spin" />}
+                Reset Password
+              </button>
             </div>
           </div>
         </div>

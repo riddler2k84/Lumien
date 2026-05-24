@@ -2,6 +2,7 @@ import { NavLink, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Calendar, Users, ClipboardCheck,
   DollarSign, CreditCard, LogOut, GraduationCap, Building2, PenSquare,
+  BookOpen, UserRound,
 } from "lucide-react";
 import { useAuthStore } from "../../store/auth";
 import clsx from "clsx";
@@ -13,15 +14,20 @@ const NAV = [
   { to: "/classrooms",       label: "Classrooms",   icon: Building2,       roles: ["admin", "headmaster", "schedule_admin"] },
   { to: "/attendance",       label: "Attendance",   icon: ClipboardCheck,  roles: ["teacher", "admin", "schedule_admin", "headmaster"] },
   { to: "/users",            label: "Users",        icon: Users,           roles: ["admin", "headmaster"] },
+  { to: "/teachers",         label: "Teachers",     icon: BookOpen,        roles: ["admin", "headmaster", "schedule_admin"] },
+  { to: "/students",         label: "Students",     icon: UserRound,       roles: ["admin", "headmaster"] },
   { to: "/fees",             label: "Fees",         icon: CreditCard,      roles: ["admin", "headmaster", "parent", "student"] },
-  { to: "/payroll",          label: "Payroll",      icon: DollarSign,      roles: ["admin", "headmaster"] },
+  { to: "/payroll",          label: "Payroll",      icon: DollarSign,      roles: ["admin", "headmaster", "teacher"] },
 ];
 
 export default function Sidebar() {
   const { role, fullName, logout } = useAuthStore();
   const navigate = useNavigate();
 
-  const visible = NAV.filter((n) => n.roles.includes("*") || n.roles.includes(role ?? ""));
+  const isSuperAdmin = role === "super_admin";
+  const visible = NAV.filter(
+    (n) => isSuperAdmin || n.roles.includes("*") || n.roles.includes(role ?? "")
+  );
 
   const handleLogout = () => {
     logout();

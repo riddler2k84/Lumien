@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import client from "../api/client";
 import { useAuthStore } from "../store/auth";
-import { CheckCircle, Clock, XCircle, AlertCircle, Users, TrendingUp } from "lucide-react";
+import { CheckCircle, Clock, XCircle, AlertCircle } from "lucide-react";
 import clsx from "clsx";
 
 const STATUS_CFG = {

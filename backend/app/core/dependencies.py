@@ -1,9 +1,8 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import decode_token
-from app.core.config import settings
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
@@ -21,12 +20,21 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 
 def require_roles(*roles: str):
     def checker(current_user=Depends(get_current_user)):
-        if current_user.role not in roles:
+        from app.models.users import UserRole
+        # Super admin bypasses every role gate
+        if current_user.role == UserRole.super_admin:
+            return current_user
+        if current_user.role.value not in roles:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
         return current_user
     return checker
 
 
-def demo_only():
-    if not settings.is_demo:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only available in demo mode")
+def demo_only(request: Request):
+    """Raises 403 when the request is not targeting the demo tenant."""
+    tenant = request.headers.get("X-Tenant", "production")
+    if tenant != "demo":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only available in the demo environment",
+        )

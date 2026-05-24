@@ -3,11 +3,9 @@ from datetime import date, timedelta
 from app.models.academic import (
     AcademicTerm, ClassSection, TeacherSubject, TeacherAvailability, Enrollment, TimeSlot
 )
+from seeds.demo.users import GRADE_LEVELS, SECTIONS, STUDENTS_PER_SECTION
 
 random.seed(42)
-
-GRADE_LEVELS = list(range(1, 13))
-SECTIONS = ["A", "B", "C"]
 
 
 def seed_academic(db, subjects: list, students: list, teachers_with_subjects: list, time_slots: list) -> dict:
@@ -43,7 +41,7 @@ def seed_academic(db, subjects: list, students: list, teachers_with_subjects: li
             db.add(TeacherSubject(teacher_id=teacher.id, subject_id=subject.id))
     db.flush()
 
-    # --- Teacher Availability (5% slots marked unavailable per teacher) ---
+    # --- Teacher Availability (5% slots marked unavailable) ---
     for teacher, _ in teachers_with_subjects:
         unavailable_slots = random.sample(time_slots, k=max(1, len(time_slots) // 20))
         for ts in unavailable_slots:
@@ -66,21 +64,21 @@ def seed_academic(db, subjects: list, students: list, teachers_with_subjects: li
                     academic_term_id=current_term.id,
                     section_name=f"{grade}{section_letter}",
                     grade_level=grade,
-                    max_students=30,
+                    max_students=STUDENTS_PER_SECTION,
                 )
                 db.add(cs)
                 sections.append((grade, section_letter, subject, cs))
     db.flush()
     created["sections"] = sections
 
-    # --- Enrollments: each student enrolls in all subjects for their grade+section ---
+    # --- Enrollments ---
     students_by_grade_section: dict[tuple, list] = {}
     idx = 0
     for grade in GRADE_LEVELS:
         for section_letter in SECTIONS:
-            grade_students = students[idx: idx + 30]
+            grade_students = students[idx: idx + STUDENTS_PER_SECTION]
             students_by_grade_section[(grade, section_letter)] = grade_students
-            idx += 30
+            idx += STUDENTS_PER_SECTION
 
     enrollment_date = date(2026, 1, 5)
     for grade, section_letter, subject, cs in sections:
